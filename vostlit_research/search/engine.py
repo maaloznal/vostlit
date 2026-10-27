@@ -75,26 +75,38 @@ def _doc_row(db: Database, document_id: int) -> Any:
 
 
 def _filters_where(f: SearchFilters | None) -> tuple[str, list[Any]]:
-    """Return (sql_fragment, params) for the documents-level filters."""
+    """Return (sql_fragment, params) for the documents-level filters.
+
+    F2 fix: region/author filters are now Cyrillic-case-insensitive by
+    folding both sides through ``lower_cyr`` (SQLite's LOWER() is ASCII-only).
+    F3 fix: date filters prefer ``original_creation_date`` (the date the
+    SOURCE describes) over ``publication_year`` (the edition's date), and
+    compare numerically via CAST(substr(...,1,4) AS INTEGER) instead of
+    lexicographically.
+    """
     if f is None:
         return ("", [])
     clauses: list[str] = []
     params: list[Any] = []
-    if f.region:
-        clauses.append("d.region LIKE ?")
-        params.append(f"%{f.region}%")
-    if f.author:
-        clauses.append("LOWER(d.author) LIKE LOWER(?)")
-        params.append(f"%{f.author}%")
+    # F2: region/author are matched in Python (_allowed_doc_ids) because
+    # SQLite's LOWER() is ASCII-only and would miss Cyrillic case.
     if f.source_type:
         clauses.append("d.source_type = ?")
         params.append(f.source_type)
-    if f.date_from:
-        clauses.append("COALESCE(d.publication_year, d.original_creation_date, '') >= ?")
-        params.append(f.date_from)
-    if f.date_to:
-        clauses.append("COALESCE(d.publication_year, d.original_creation_date, '') <= ?")
-        params.append(f.date_to)
+    if f.date_from or f.date_to:
+        # F3: prefer original_creation_date (the event date) over publication_year.
+        # Compare numerically on the first 4 chars (year), ignoring non-numeric.
+        # If original_creation_date is NULL, fall back to publication_year.
+        if f.date_from:
+            clauses.append(
+                "CAST(substr(COALESCE(d.original_creation_date, d.publication_year, '9999'),1,4) AS INTEGER) >= ?"
+            )
+            params.append(int(f.date_from))
+        if f.date_to:
+            clauses.append(
+                "CAST(substr(COALESCE(d.original_creation_date, d.publication_year, '0000'),1,4) AS INTEGER) <= ?"
+            )
+            params.append(int(f.date_to))
     if f.page_types:
         placeholders = ",".join("?" for _ in f.page_types)
         clauses.append(f"d.page_type IN ({placeholders})")
@@ -109,13 +121,34 @@ def _filters_where(f: SearchFilters | None) -> tuple[str, list[Any]]:
 
 
 def _allowed_doc_ids(db: Database, f: SearchFilters | None) -> set[int] | None:
-    """Return the set of document ids allowed by filters, or None = all."""
+    """Return the set of document ids allowed by filters, or None = all.
+
+    F2 fix: region/author matching is done in Python with ``fold_for_match``
+    (Cyrillic-aware, ё/pre-reform-insensitive) because SQLite's LOWER() is
+    ASCII-only and would miss 'дагестан' vs 'Дагестан'.
+    """
     if f is None:
         return None
     where, params = _filters_where(f)
-    sql = f"SELECT d.id FROM documents d {where}"
+    sql = f"SELECT d.id, d.region, d.author, d.source_type, d.page_type, d.original_creation_date, d.publication_year FROM documents d {where}"
     rows = db.conn.execute(sql, params).fetchall()
-    return {r["id"] for r in rows} if rows else set()
+    if not rows:
+        return set()
+    if f.region is None and f.author is None:
+        return {r["id"] for r in rows}
+    # F2: Python-side Cyrillic-aware region/author matching
+    region_q = textnorm.fold_for_match(f.region) if f.region else None
+    author_q = textnorm.fold_for_match(f.author) if f.author else None
+    out: set[int] = set()
+    for r in rows:
+        if region_q is not None:
+            if region_q not in textnorm.fold_for_match(r["region"] or ""):
+                continue
+        if author_q is not None:
+            if author_q not in textnorm.fold_for_match(r["author"] or ""):
+                continue
+        out.add(r["id"])
+    return out
 
 
 def _tokenize_with_offsets(text: str) -> list[tuple[str, int, int]]:
@@ -261,6 +294,11 @@ class SearchEngine:
         Returns variants matching the original or normalised form, plus their
         owning entities and (if linked) the evidence section. Each result's
         ``snippet`` is the original_form (so the agent sees the exact spelling).
+
+        F1 fix: filters are now applied — variants whose evidence_section_id
+        points at a section in a non-matching document are filtered out, and
+        the entity's canonical name is checked against the region/author filter
+        via its evidence document.
         """
         if not name:
             return []
@@ -274,7 +312,24 @@ class SearchEngine:
                LIMIT ?""",
             (norm, name, f"%{norm}%", limit),
         ).fetchall()
-        # also FTS
+        # F1: apply filters — if the variant has an evidence_section_id, check
+        # its document against the filter; if it has none, keep it (dictionary
+        # entry, not yet attested).
+        allowed = _allowed_doc_ids(self.db, filters)
+        if allowed is not None:
+            kept = []
+            for r in rows:
+                if r["evidence_section_id"] is None:
+                    kept.append(r)  # dictionary-only variant; keep
+                    continue
+                s = self.db.conn.execute(
+                    "SELECT document_id FROM document_sections WHERE id = ?",
+                    (r["evidence_section_id"],)
+                ).fetchone()
+                if s and s["document_id"] in allowed:
+                    kept.append(r)
+            rows = kept
+        # also FTS — but apply the SAME F1 filter to FTS hits
         fts_rows = _fts.fts_match_name_variants(self.db.conn, name, limit=limit)
         seen = {r["id"] for r in rows}
         for fr in fts_rows:
@@ -284,8 +339,17 @@ class SearchEngine:
                 "SELECT id, entity_id, original_form, normalized_form, language, variant_type, verification_status, evidence_section_id FROM name_variants WHERE id = ?",
                 (fr["variant_id"],),
             ).fetchone()
-            if v:
-                rows.append(v)
+            if v is None:
+                continue
+            # F1: apply the same evidence-document filter to FTS hits
+            if allowed is not None and v["evidence_section_id"] is not None:
+                s = self.db.conn.execute(
+                    "SELECT document_id FROM document_sections WHERE id = ?",
+                    (v["evidence_section_id"],)
+                ).fetchone()
+                if not (s and s["document_id"] in allowed):
+                    continue
+            rows.append(v)
         results: list[SearchResult] = []
         for r in rows:
             ent_name = None
@@ -324,9 +388,15 @@ class SearchEngine:
         """Fuzzy similarity over name_variants + entity canonical names.
 
         Results are CANDIDATES only — the explanation says so explicitly.
+
+        N2 fix: filters are now applied — variant candidates whose evidence
+        is in a non-matching document are filtered out (same logic as
+        search_variants). Entity candidates with no evidence are kept (they
+        are dictionary-level, not corpus-attested).
         """
         if not name:
             return []
+        allowed = _allowed_doc_ids(self.db, filters)
         cands: list[tuple[str, Any]] = []
         for r in self.db.conn.execute("SELECT id, original_form FROM name_variants"):
             cands.append((r["original_form"], ("variant", r["id"])))
@@ -337,6 +407,14 @@ class SearchEngine:
         for score, (kind, oid) in matches:
             if kind == "variant":
                 v = self.db.conn.execute("SELECT id, entity_id, original_form, normalized_form, verification_status, evidence_section_id FROM name_variants WHERE id = ?", (oid,)).fetchone()
+                # N2: apply filter to variant candidates with evidence
+                if allowed is not None and v and v["evidence_section_id"] is not None:
+                    s = self.db.conn.execute(
+                        "SELECT document_id FROM document_sections WHERE id = ?",
+                        (v["evidence_section_id"],)
+                    ).fetchone()
+                    if not (s and s["document_id"] in allowed):
+                        continue
                 ent = None
                 if v and v["entity_id"]:
                     e = self.db.conn.execute("SELECT canonical_name FROM entities WHERE id = ?", (v["entity_id"],)).fetchone()

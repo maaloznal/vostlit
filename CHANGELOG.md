@@ -2,6 +2,85 @@
 
 All notable changes to vostlit-research. Dates are Europe/Moscow.
 
+## [0.3.0] — 2025-10-27
+
+Master Upgrade Mission: P0 security & reproducibility hardening + P1 search
+fixes + inventory/resume CLI. Driven by 4 parallel subagent audits (site
+coverage, schema, search quality, security) + 1 independent QA pass.
+
+### Security (P0 — confirmed by SECURITY_AUDIT.md + QA_VERIFICATION.md)
+- **D-1 redirect leak (CRITICAL, fixed):** `httpx.Client(follow_redirects=False)`
+  + manual per-hop `_check_scope` on every redirect target BEFORE the request
+  is sent. Offsite redirects are now refused without ever sending a request
+  to the attacker host.
+- **D-2 allowed_sections bypass (CRITICAL, fixed):** removed `/` from the
+  default `allowed_sections` (it bypassed the path check since every path
+  starts with `/`). Homepage handled explicitly in `_check_scope`.
+- **D-3 silent 4xx/5xx parsing (CRITICAL, fixed):** added explicit
+  `status_code >= 400` check that raises `HTTPStatusError` (429/503 →
+  `_RetryableStatus` with `Retry-After` honor). Error bodies are no longer
+  parsed as document content.
+- **D-4 response size cap (HIGH, fixed):** streaming read with 25 MB cap;
+  `TooLargeResponseError` on overflow.
+- **D-8 resp.elapsed RuntimeError (MEDIUM, fixed):** elapsed computed with
+  `time.monotonic()`, never from `resp.elapsed`.
+- **D-6/D-7 scheme/port validation:** `file://`/`ftp://`/`gopher://` refused;
+  non-default ports (≠ 80/443) refused.
+- Regression tests: `tests/test_p0_p1_regression.py` (D-1/D-2/D-6/D-7 +
+  portability + section-id + F1/F2/F3 + inventory).
+
+### Reproducibility (P0 — confirmed by SCHEMA_AUDIT.md + QA_VERIFICATION.md)
+- **B-§3.1 section-id instability (CRITICAL, fixed):** on unchanged re-import,
+  `store.upsert_document` no longer DELETEs+re-INSERTs sections (which
+  recycled AUTOINCREMENT ids and dangled every `mentions.section_id` /
+  `evidence_section_id` / note fragment). Added `document_sections.stable_key`
+  (sha1 of canonical_url:version_number:sequence_number) — stable across
+  re-parses. Migration v1→v2 + backfill. Verified: id stays 1→1 on re-import.
+- **New tables (P2):** `research_note_fragments` (FK-protected fragment refs,
+  replaces JSON blobs), `document_relations` (verifiable work/edition
+  relationships with `verification_status`).
+- `schema_version` bumped to 2.
+
+### Search quality (P1 — confirmed by SEARCH_AUDIT.md + QA_VERIFICATION.md)
+- **F1 variants/fuzzy ignore filters (HIGH, fixed):** `search_variants` and
+  `search_fuzzy` now call `_allowed_doc_ids` and filter both SQL rows AND FTS
+  hits by the evidence document's region/author.
+- **F2 Cyrillic case-sensitivity (HIGH, fixed):** region/author matching moved
+  to Python `fold_for_match` (SQLite `LOWER()` is ASCII-only). `search_by_region`
+  / `search_by_author` listing APIs also fixed (N1 from QA).
+- **F3 date filter semantics (HIGH, fixed):** date filter now prefers
+  `original_creation_date` (event date) over `publication_year`, and compares
+  numerically via `CAST(substr(...) AS INTEGER)` instead of lexicographically.
+  A 1792 primary source published in 2003 is now correctly found by
+  `search_by_date("1790","1800")`.
+
+### Corpus management (P1)
+- **`inventory` CLI:** coverage report (discovered/parsed/skipped/error/stale/
+  crawl_log_errors/by_type/unsupported_page_types) — all from real DB state.
+- **`resume` CLI:** resume crawl for discovered/error documents without
+  re-fetching parsed/unchanged.
+- **Portability (P0):** removed all hardcoded `/home/z/my-project/vostlit-research`
+  paths from code and tests; use `Path(__file__).resolve().parent.parent`.
+- **Version sync:** pyproject/__init__/SKILL all at 0.3.0.
+- **seed_corpus.py:** uses `load_config()` (applies `VOSTLIT_*` env) so
+  `VOSTLIT_DB_PATH` works in subprocesses.
+
+### Tests
+- 77 passing (was 67), 2 skipped (live). New: `test_p0_p1_regression.py`
+  (10 tests covering D-1/D-2/D-6/D-7/B-§3.1/stable_key-backfill/F1/F2/F3/inventory).
+
+### Documentation
+- New: UPGRADE_BASELINE, SITE_COVERAGE_AUDIT, SCHEMA_AUDIT, SEARCH_AUDIT,
+  SECURITY_AUDIT, QA_VERIFICATION.
+- Updated: SKILL (inventory/resume commands), AGENT_INTEGRATION, TESTING.
+
+### Known limitations (from QA_VERIFICATION.md)
+- `_is_doc_url` still requires `/texts/` → misses `/common/`, `/Repertorium/`,
+  the on-site search form (N4, site-coverage P0 — not yet fixed).
+- `chrono.phtml` yields 0 sections (table-based content; N4).
+- `region_catalog`/`alpha_index` not in `fetch_page_types` (N4).
+- `datetime.utcnow()` deprecation resolved (N5).
+
 ## [0.2.0] — 2025-10-27
 
 Major skill improvements: frameset deep-parsing, heuristic mention

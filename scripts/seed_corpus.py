@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from vostlit_research.config import Config
+from vostlit_research.config import Config, load_config
 from vostlit_research.db import Database
 from vostlit_research.collector.parser import parse_page
 from vostlit_research.collector.crawl import _parsed_to_document_in
@@ -35,7 +35,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=None)
     args = ap.parse_args()
-    cfg = Config()
+    cfg = load_config()  # applies VOSTLIT_* env vars
     if args.db:
         cfg.db_path = Path(args.db)
     cfg.ensure_dirs()

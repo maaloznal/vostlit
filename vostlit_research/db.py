@@ -22,13 +22,13 @@ from typing import Any, Iterable
 from . import textnorm
 
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # v2: document_sections.stable_key, research_note_fragments, document_relations
 
 
 def _now() -> str:
-    # ISO 8601, local-ish but timezone-explicit. We store naive UTC for
-    # portability; the CLI formats for display in Europe/Moscow when needed.
-    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    # ISO 8601, timezone-explicit UTC. (N5: uses timezone-aware now() instead
+    # of the deprecated datetime.utcnow().)
+    return datetime.now(tz=__import__("datetime").timezone.utc).isoformat(timespec="seconds")
 
 
 class Database:
@@ -61,11 +61,49 @@ class Database:
                 "SELECT MAX(version) AS v FROM schema_version"
             ).fetchone()
             current = row["v"] if (row and row["v"] is not None) else 0
+            # --- v2 migration: add stable_key column to document_sections ---
+            if current < 2:
+                cols = [r["name"] for r in self.conn.execute(
+                    "PRAGMA table_info(document_sections)"
+                ).fetchall()]
+                if "stable_key" not in cols:
+                    self.conn.execute(
+                        "ALTER TABLE document_sections ADD COLUMN stable_key TEXT"
+                    )
+                    self.conn.execute(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS idx_sections_stable_key "
+                        "ON document_sections(stable_key)"
+                    )
             if current < SCHEMA_VERSION:
                 self.conn.execute(
                     "INSERT INTO schema_version(version, applied_at) VALUES (?, ?)",
                     (SCHEMA_VERSION, _now()),
                 )
+        # always backfill any missing stable_keys (idempotent, cheap)
+        self._backfill_stable_keys()
+
+    def _backfill_stable_keys(self) -> None:
+        """Compute stable_key = sha1(canonical_url:version_number:sequence_number)
+        for every section that lacks one. Idempotent."""
+        import hashlib
+        rows = self.conn.execute(
+            """SELECT s.id, s.sequence_number, s.document_id, v.version_number, d.canonical_url
+               FROM document_sections s
+               JOIN documents d ON d.id = s.document_id
+               JOIN document_versions v ON v.id = s.document_version_id
+               WHERE s.stable_key IS NULL"""
+        ).fetchall()
+        for r in rows:
+            key = hashlib.sha1(
+                f"{r['canonical_url']}:{r['version_number']}:{r['sequence_number']}".encode("utf-8")
+            ).hexdigest()
+            try:
+                self.conn.execute(
+                    "UPDATE document_sections SET stable_key = ? WHERE id = ?",
+                    (key, r["id"]),
+                )
+            except Exception:  # noqa: BLE001 — duplicate key on backfill; skip
+                pass
 
     def schema_version(self) -> int:
         row = self.conn.execute(

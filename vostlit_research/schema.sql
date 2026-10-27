@@ -84,6 +84,7 @@ CREATE INDEX IF NOT EXISTS idx_versions_doc ON document_versions(document_id);
 -- ----------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS document_sections (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    stable_key           TEXT UNIQUE,                  -- sha1(canonical_url:version_number:sequence_number); stable across re-imports
     document_version_id  INTEGER NOT NULL REFERENCES document_versions(id) ON DELETE CASCADE,
     document_id          INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     section_type         TEXT NOT NULL,                -- body|heading|footnote|note|bibliography|caption|page_break|chapter_marker
@@ -171,6 +172,46 @@ CREATE TABLE IF NOT EXISTS research_notes (
     change_history           TEXT                      -- JSON list of {at, by, change}
 );
 CREATE INDEX IF NOT EXISTS idx_notes_status ON research_notes(status);
+
+-- ----------------------------------------------------------------------
+-- research_note_fragments: structured, FK-protected fragment references
+-- (replaces the JSON blobs in research_notes for new notes; the JSON blobs
+-- are kept for backward compatibility). Each row is one cited fragment,
+-- with its role (supporting/contradicting) and a stable link to the section.
+-- ----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS research_note_fragments (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    research_note_id     INTEGER NOT NULL REFERENCES research_notes(id) ON DELETE CASCADE,
+    role                 TEXT NOT NULL,                -- supporting|contradicting
+    section_id           INTEGER REFERENCES document_sections(id) ON DELETE SET NULL,
+    document_id          INTEGER REFERENCES documents(id) ON DELETE SET NULL,
+    quote                TEXT,
+    url                  TEXT,
+    stable_key           TEXT                          -- stable_key of the section (survives re-parse)
+);
+CREATE INDEX IF NOT EXISTS idx_rnf_note ON research_note_fragments(research_note_id);
+CREATE INDEX IF NOT EXISTS idx_rnf_section ON research_note_fragments(section_id);
+
+-- ----------------------------------------------------------------------
+-- document_relations: verifiable relationships between documents
+-- (part_of, continuation, notes_for_text, separate_edition, republication,
+--  translation_of, mentioned_in, indexed_by). Each relation has an
+-- evidence_section_id and a verification_status — never auto-confirmed.
+-- ----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS document_relations (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_doc_id         INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    target_doc_id         INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    relation_type         TEXT NOT NULL,               -- part_of|continuation|notes_for_text|separate_edition|republication|translation_of|mentioned_in|indexed_by
+    evidence_section_id   INTEGER REFERENCES document_sections(id) ON DELETE SET NULL,
+    date_range            TEXT,
+    notes                 TEXT,
+    verification_status   TEXT NOT NULL DEFAULT 'candidate',  -- candidate|confirmed|rejected
+    created_at            TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rel_source ON document_relations(source_doc_id);
+CREATE INDEX IF NOT EXISTS idx_rel_target ON document_relations(target_doc_id);
+CREATE INDEX IF NOT EXISTS idx_rel_type   ON document_relations(relation_type);
 
 -- ----------------------------------------------------------------------
 -- crawl_log: every URL the collector has touched (for resume & audit)

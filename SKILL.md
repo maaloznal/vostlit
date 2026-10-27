@@ -1,7 +1,7 @@
 ---
 name: vostlit-research
 slug: vostlit-research
-version: 0.1.0
+version: 0.3.0
 description: Reproducible historical research over the vostlit.info source corpus (Caucasus & Dagestan focus). Search, read, compare and cite medieval/early-modern historical sources with verifiable links to the original pages.
 metadata: {"clawdbot":{"emoji":"📜","requires":{"bins":["python3"]},"os":["linux","darwin"]}}
 ---
@@ -42,14 +42,14 @@ contacted only on explicit `crawl`/`audit-site` commands.
 ## Install / one-time setup
 
 ```bash
-cd /home/z/my-project/vostlit-research
+cd <project-root>
 python3 -m vostlit_research doctor          # check env, db, FTS5
 python3 scripts/seed_corpus.py              # import the 10 verified fixture pages + curated entities
 python3 -m vostlit_research stats           # confirm corpus loaded
 ```
 
 All commands run as `python3 -m vostlit_research <command>` from the project
-root (or with `PYTHONPATH=/home/z/my-project/vostlit-research`).
+root (or with `PYTHONPATH=<project-root>`).
 
 ## MANDATORY research algorithm
 
@@ -143,6 +143,8 @@ python3 -m vostlit_research compare "<claim>" <id1> <id2>
 python3 -m vostlit_research bibliography <id>
 python3 -m vostlit_research works --min 1                # group docs into logical works
 python3 -m vostlit_research regions                      # known region catalog slugs
+python3 -m vostlit_research inventory                    # coverage: discovered/parsed/skipped/error/stale
+python3 -m vostlit_research resume --limit 25            # resume crawl for discovered/error docs
 python3 -m vostlit_research note add --claim "..." --status hypothesis --supporting sec:487
 python3 -m vostlit_research note list
 python3 -m vostlit_research note show <id>

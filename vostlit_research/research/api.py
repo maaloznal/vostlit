@@ -109,30 +109,47 @@ class ResearchEngine:
         f = self._filters(region=region)
         if query:
             return [r.to_dict() for r in self.search_engine.search_hybrid(query, f, limit=limit)]
-        # no query: list documents in region
+        # N1 fix: Cyrillic-aware region matching via fold_for_match (SQLite
+        # LOWER() is ASCII-only and would miss 'дагестан' vs 'Дагестан').
+        from .. import textnorm
+        q = textnorm.fold_for_match(region)
         rows = self.db.conn.execute(
-            "SELECT id, canonical_url, title, author, region, publication_year, page_type FROM documents WHERE region LIKE ? ORDER BY title LIMIT ?",
-            (f"%{region}%", limit),
+            "SELECT id, canonical_url, title, author, region, publication_year, page_type FROM documents ORDER BY title"
         ).fetchall()
-        return [dict(r) for r in rows]
+        out = [dict(r) for r in rows if q in textnorm.fold_for_match(r["region"] or "")]
+        return out[:limit]
 
     def search_by_author(self, author: str, query: str | None = None, *, limit: int = 50) -> list[dict]:
         f = self._filters(author=author)
         if query:
             return [r.to_dict() for r in self.search_engine.search_hybrid(query, f, limit=limit)]
+        # N1 fix: Cyrillic-aware author matching
+        from .. import textnorm
+        q = textnorm.fold_for_match(author)
         rows = self.db.conn.execute(
-            "SELECT id, canonical_url, title, author, region, publication_year FROM documents WHERE author LIKE ? ORDER BY title LIMIT ?",
-            (f"%{author}%", limit),
+            "SELECT id, canonical_url, title, author, region, publication_year FROM documents ORDER BY title"
         ).fetchall()
-        return [dict(r) for r in rows]
+        out = [dict(r) for r in rows if q in textnorm.fold_for_match(r["author"] or "")]
+        return out[:limit]
 
     def search_by_date(self, date_from: str | None, date_to: str | None, query: str | None = None, *, limit: int = 50) -> list[dict]:
         f = self._filters(date_from=date_from, date_to=date_to)
         if query:
             return [r.to_dict() for r in self.search_engine.search_hybrid(query, f, limit=limit)]
+        # F3: prefer original_creation_date (event date) over publication_year,
+        # compare numerically on the first 4 chars.
+        clauses = []
+        params: list = []
+        if date_from:
+            clauses.append("CAST(substr(COALESCE(d.original_creation_date, d.publication_year, '9999'),1,4) AS INTEGER) >= ?")
+            params.append(int(date_from))
+        if date_to:
+            clauses.append("CAST(substr(COALESCE(d.original_creation_date, d.publication_year, '0000'),1,4) AS INTEGER) <= ?")
+            params.append(int(date_to))
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
         rows = self.db.conn.execute(
-            "SELECT id, canonical_url, title, author, publication_year FROM documents WHERE COALESCE(publication_year, original_creation_date, '') BETWEEN COALESCE(?, '') AND COALESCE(?, 'zzz') ORDER BY publication_year LIMIT ?",
-            (date_from, date_to, limit),
+            f"SELECT d.id, d.canonical_url, d.title, d.author, d.publication_year, d.original_creation_date FROM documents d {where} ORDER BY d.original_creation_date, d.publication_year LIMIT ?",
+            params + [limit],
         ).fetchall()
         return [dict(r) for r in rows]
 

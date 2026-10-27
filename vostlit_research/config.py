@@ -29,8 +29,10 @@ class Config:
     # --- source site -------------------------------------------------------
     base_url: str = "https://www.vostlit.info/"
     allowed_domains: tuple[str, ...] = ("www.vostlit.info", "vostlit.info")
+    # D-2 fix: '/' is intentionally NOT in this list — it would bypass the
+    # path check (every path starts with '/'). The homepage is handled
+    # explicitly in HttpClient._check_scope (path == "/" is allowed).
     allowed_sections: tuple[str, ...] = (
-        "/",  # homepage
         "/haupt-Dateien/",  # alphabetical author index
         "/Texts/",  # documents (texts, catalogs, collections)
         "/common/",  # site-wide indexes (itogi)

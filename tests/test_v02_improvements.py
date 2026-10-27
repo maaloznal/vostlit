@@ -242,11 +242,13 @@ def test_works_groups_by_url_prefix(tmp_db):
 
 def test_doctor_hints_on_empty_corpus(tmp_path):
     import subprocess, sys, os
+    from pathlib import Path
+    root = str(Path(__file__).resolve().parent.parent)
     env = dict(os.environ)
     env["VOSTLIT_DB_PATH"] = str(tmp_path / "empty.db")
-    env["PYTHONPATH"] = "/home/z/my-project/vostlit-research"
+    env["PYTHONPATH"] = root
     r = subprocess.run([sys.executable, "-m", "vostlit_research", "doctor"],
                        capture_output=True, text=True, env=env,
-                       cwd="/home/z/my-project/vostlit-research")
+                       cwd=root)
     assert r.returncode == 0
     assert "[HINT] corpus is empty" in r.stdout

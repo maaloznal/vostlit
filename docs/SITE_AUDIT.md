@@ -882,7 +882,7 @@ vostlit-research-audit/0.1)`, `follow_redirects=True`, `timeout=30 s`,
 
 ## 14. Test fixtures
 
-Saved under `/home/z/my-project/vostlit-research/tests/fixtures/`:
+Saved under ``tests/fixtures/``:
 
 - `fixtures_manifest.json` — authoritative manifest (filename, source_url,
   fetched_at, http_status, content_type, byte_size, sha256, encoding,

@@ -158,23 +158,42 @@ def upsert_document(
                 action = "created" if action == "created" else "updated"
 
         # ---- sections -------------------------------------------------------
+        # CRITICAL (P0c, schema audit §3.1): on the UNCHANGED path we must NOT
+        # rewrite sections — the old code did DELETE+INSERT which recycled
+        # AUTOINCREMENT ids, dangling every mentions.section_id /
+        # evidence_section_id / research-note fragment pointing at them.
+        # Now: unchanged path => sections already identical (content_hash
+        # matched), leave them alone. changed path => insert sections for the
+        # NEW version_id only (old version's sections survive on their own
+        # version_id). Compute a stable_key so the row is findable across
+        # re-parses even if ids change.
+        import hashlib as _hashlib
         if doc.sections and version_id is not None:
-            # sections belong to this version; clear any prior sections for THIS version
-            db.conn.execute(
-                "DELETE FROM document_sections WHERE document_version_id = ?", (version_id,)
-            )
-            for i, s in enumerate(doc.sections):
-                db.conn.execute(
-                    """
-                    INSERT INTO document_sections
-                      (document_version_id, document_id, section_type, heading, text, text_lower,
-                       sequence_number, page_number, anchor, source_url)
-                    VALUES (?,?,?,?,?,?,?,?,?,?)
-                    """,
-                    (version_id, doc_id, s.section_type, s.heading, s.text,
-                     textnorm.lower_cyr(s.text or "") if s.text else None,
-                     s.sequence_number, s.page_number, s.anchor, s.source_url),
-                )
+            existing_sections = db.conn.execute(
+                "SELECT COUNT(*) AS c FROM document_sections WHERE document_version_id = ?",
+                (version_id,)
+            ).fetchone()["c"]
+            if existing_sections == 0:
+                vrow = db.conn.execute(
+                    "SELECT version_number FROM document_versions WHERE id = ?",
+                    (version_id,)
+                ).fetchone()
+                vnum = vrow["version_number"] if vrow else 0
+                for s in doc.sections:
+                    stable_key = _hashlib.sha1(
+                        f"{canonical}:{vnum}:{s.sequence_number}".encode("utf-8")
+                    ).hexdigest()
+                    db.conn.execute(
+                        """
+                        INSERT INTO document_sections
+                          (stable_key, document_version_id, document_id, section_type, heading, text, text_lower,
+                           sequence_number, page_number, anchor, source_url)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                        """,
+                        (stable_key, version_id, doc_id, s.section_type, s.heading, s.text,
+                         textnorm.lower_cyr(s.text or "") if s.text else None,
+                         s.sequence_number, s.page_number, s.anchor, s.source_url),
+                    )
 
     # FTS sync (outside the write transaction is fine; reindex opens its own)
     db.reindex_document(doc_id)

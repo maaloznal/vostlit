@@ -499,6 +499,82 @@ def cmd_regions(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_inventory(args: argparse.Namespace) -> int:
+    """Report corpus coverage: discovered / parsed / skipped / error / stale.
+
+    All metrics are computed from the real DB state, never invented.
+    """
+    cfg, db = _open_engine(args)
+    try:
+        st = db.stats()
+        # discovered-but-not-fetched
+        discovered = st["documents_by_status"].get("discovered", 0)
+        parsed = st["documents_by_status"].get("parsed", 0)
+        unchanged = st["documents_by_status"].get("unchanged", 0)
+        skipped = st["documents_by_status"].get("skipped", 0)
+        errored = st["documents_by_status"].get("error", 0)
+        # stale: not checked in 30 days
+        stale = db.conn.execute(
+            """SELECT COUNT(*) c FROM documents
+               WHERE last_checked_at IS NULL
+                  OR last_checked_at < datetime('now', '-30 days')"""
+        ).fetchone()["c"]
+        # crawl_log error count
+        crawl_errors = db.conn.execute(
+            "SELECT COUNT(*) c FROM crawl_log WHERE action='error'"
+        ).fetchone()["c"]
+        # page_type coverage
+        by_type = st["documents_by_type"]
+        # unsupported (skipped) page types
+        unsupported = db.conn.execute(
+            "SELECT page_type, COUNT(*) c FROM documents WHERE status='skipped' GROUP BY page_type"
+        ).fetchall()
+        out = {
+            "total_documents": st["documents"],
+            "discovered": discovered,
+            "parsed": parsed,
+            "unchanged": unchanged,
+            "skipped": skipped,
+            "errored": errored,
+            "stale_not_checked_30d": stale,
+            "crawl_log_errors": crawl_errors,
+            "documents_by_type": by_type,
+            "unsupported_page_types": {r["page_type"]: r["c"] for r in unsupported},
+            "sections": st["document_sections"],
+            "entities": st["entities"],
+            "name_variants": st["name_variants"],
+            "mentions": st["mentions"],
+            "research_notes": st["research_notes"],
+        }
+        _print(out)
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_resume(args: argparse.Namespace) -> int:
+    """Resume the crawl: process discovered/error documents that haven't been
+    fetched yet (or errored last time). Does NOT re-fetch parsed/unchanged."""
+    from .collector.crawl import Crawler
+    cfg, db = _open_engine(args)
+    try:
+        crawler = Crawler(cfg, db)
+        try:
+            # queue = discovered + error status docs
+            queue_rows = db.conn.execute(
+                "SELECT canonical_url FROM documents WHERE status IN ('discovered','error') LIMIT ?",
+                (args.limit,)
+            ).fetchall()
+            queue = [r["canonical_url"] for r in queue_rows]
+            report = crawler.crawl(seeds=queue, limit=args.limit, force=args.force)
+        finally:
+            crawler.http.close()
+        _print(report.as_dict())
+        return 0 if report.errors == 0 else 1
+    finally:
+        db.close()
+
+
 def cmd_by_region(args: argparse.Namespace) -> int:
     from .research.api import ResearchEngine
     cfg, db = _open_engine(args)
@@ -661,6 +737,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("regions", help="list known region catalog slugs")
     sp.set_defaults(func=cmd_regions)
+
+    sp = sub.add_parser("inventory", help="corpus coverage report (discovered/parsed/skipped/error/stale)")
+    sp.set_defaults(func=cmd_inventory)
+
+    sp = sub.add_parser("resume", help="resume crawl: fetch discovered/error documents")
+    sp.add_argument("--limit", type=int, default=25)
+    sp.add_argument("--force", action="store_true")
+    sp.set_defaults(func=cmd_resume)
 
     return p
 

@@ -33,7 +33,7 @@ links back to the original pages**.
 ## Quick start
 
 ```bash
-cd /home/z/my-project/vostlit-research
+cd <project-root>
 
 # 1. health check (env, db, FTS5)
 python3 -m vostlit_research doctor

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 from vostlit_research import cli
 from vostlit_research.collector.http import HttpClient, RefusedError
@@ -11,7 +12,7 @@ from vostlit_research.config import Config
 from vostlit_research import archive
 
 
-ROOT = "/home/z/my-project/vostlit-research"
+ROOT = str(Path(__file__).resolve().parent.parent)
 
 
 def _run(args, env_db):

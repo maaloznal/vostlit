@@ -3,7 +3,7 @@
 ## Running the suite
 
 ```bash
-cd /home/z/my-project/vostlit-research
+cd <project-root>
 python3 -m pytest tests/ -c pyproject.toml
 ```
 
