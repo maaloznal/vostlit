@@ -319,3 +319,70 @@ class ResearchEngine:
         if fmt == "json":
             return json.dumps(results, ensure_ascii=False, indent=2)
         return "\n".join(json.dumps(r, ensure_ascii=False) for r in results)
+
+    # === Semantic Research Engine (v0.4) ================================
+    def research(self, query: str, *, region: str | None = None,
+                 year: str | None = None, limit: int = 30) -> dict:
+        """Full semantic research pipeline: decompose → expand variants →
+        retrieve → read context → link evidence → synthesize answer.
+
+        Returns a SynthesisResult dict with verdict, findings (each with
+        clickable fragment links), identifications, contradictions, and
+        next steps. Every assertion traces to a verifiable vostlit.info URL.
+        """
+        from .variants import expand_variants
+        from .reader import DocumentReader
+        from .synthesis import EvidenceLinker, render_markdown
+        # 1. expand variants
+        # pull the variant dictionary for OCR candidates
+        variant_dict = [r["original_form"] for r in self.db.conn.execute(
+            "SELECT original_form FROM name_variants"
+        ).fetchall()]
+        vs = expand_variants(query, variant_dict=variant_dict)
+        forms = vs.forms()[:40]  # cap to avoid explosion
+
+        # 2. retrieve across all forms
+        f = SearchFilters(region=region) if region else None
+        all_hits: list[dict] = []
+        seen_sections: set[int] = set()
+        for form in forms:
+            for r in self.search_engine.search_hybrid(form, f, limit=limit):
+                if r.section_id and r.section_id not in seen_sections:
+                    seen_sections.add(r.section_id)
+                    d = r.to_dict()
+                    d["searched_form"] = form  # record WHICH variant matched
+                    all_hits.append(d)
+
+        # 3. read context around each hit → structured claims
+        reader = DocumentReader(self.db)
+        read_result = reader.read_all(all_hits, query)
+
+        # 4. link evidence → synthesis
+        linker = EvidenceLinker(self.db)
+        synthesis = linker.link(read_result)
+
+        # 5. render
+        return {
+            "query": query,
+            "region": region,
+            "year": year,
+            "variants_searched": forms,
+            "n_variants": len(forms),
+            "n_hits": len(all_hits),
+            "verdict": synthesis.verdict,
+            "summary": synthesis.summary,
+            "findings": [
+                {
+                    "claim": f.claim,
+                    "evidence_type": f.evidence_type,
+                    "confidence": f.confidence,
+                    "independent_witnesses": f.independent_witnesses,
+                    "forms_attested": sorted(f.forms_attested),
+                    "supporting_fragments": f.supporting_fragments,
+                } for f in synthesis.findings
+            ],
+            "identifications": synthesis.identifications,
+            "contradictions": synthesis.contradictions,
+            "next_steps": synthesis.next_steps,
+            "markdown": render_markdown(synthesis),
+        }

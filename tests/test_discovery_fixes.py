@@ -167,3 +167,22 @@ def test_region_catalog_now_fetchable_and_indexable():
     # the catalog's extracted_text should now contain document descriptions
     assert p.extracted_text  # not empty
     assert len(p.extracted_text) > 100  # has real content
+
+
+# ---------- bug fix: text1.htm must NOT be treated as a catalog ----------
+def test_nested_htm_doc_not_treated_as_catalog():
+    """Regression: a .htm document deep in /Texts/Dokumenty/<region>/<century>/.../
+    was misclassified as a region catalog by _is_catalog_or_index (which matched
+    ANY .htm under /Texts/Dokumenty/). This caused discover() to harvest the
+    document's links instead of storing it — silently dropping it from the corpus.
+    A real region catalog is /Texts/Dokumenty/<region>.html (one segment)."""
+    from vostlit_research.collector.discover import _is_catalog_or_index
+    # the bug case: a nested document
+    assert not _is_catalog_or_index(
+        "https://www.vostlit.info/Texts/Dokumenty/Kavkaz/XIX/1860-1880/Tri_mesjac_dag_otrjad/text1.htm"
+    ), "nested text1.htm must NOT be a catalog"
+    # real catalogs must still be detected
+    assert _is_catalog_or_index("https://www.vostlit.info/Texts/Dokumenty/kavkaz.html")
+    assert _is_catalog_or_index("https://www.vostlit.info/Texts/Dokumenty/russ.htm")
+    assert _is_catalog_or_index("https://www.vostlit.info/Texts/Dokumenty/index.phtml?id=2070")
+    assert _is_catalog_or_index("https://www.vostlit.info/Texts/Dokumenty/Kavkaz/VI/Dag_chron/index.htm")

@@ -575,6 +575,51 @@ def cmd_resume(args: argparse.Namespace) -> int:
         db.close()
 
 
+def cmd_research(args: argparse.Namespace) -> int:
+    """Full semantic research: one command → verdict + clickable evidence links.
+
+    Implements the full pipeline: variant expansion → retrieval → context
+    reading → evidence linking → synthesis with clickable vostlit.info URLs.
+    """
+    from .research.api import ResearchEngine
+    cfg, db = _open_engine(args)
+    try:
+        eng = ResearchEngine(db)
+        result = eng.research(args.query, region=args.region, year=args.year, limit=args.limit)
+        if args.markdown:
+            print(result["markdown"])
+        else:
+            _print(result)
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_expand_variants(args: argparse.Namespace) -> int:
+    """Show all spelling variants that would be searched for a toponym."""
+    from .research.variants import expand_variants
+    cfg, db = _open_engine(args)
+    try:
+        variant_dict = [r["original_form"] for r in db.conn.execute(
+            "SELECT original_form FROM name_variants"
+        ).fetchall()]
+        vs = expand_variants(args.name, variant_dict=variant_dict if variant_dict else None)
+        out = {
+            "original": vs.original,
+            "core": vs.core,
+            "n_variants": len(vs.variants),
+            "variants": [
+                {"form": v.form, "derivation": v.derivation, "confidence": v.confidence}
+                for v in vs.variants
+            ],
+            "forms_for_search": vs.forms(),
+        }
+        _print(out)
+    finally:
+        db.close()
+    return 0
+
+
 def cmd_by_region(args: argparse.Namespace) -> int:
     from .research.api import ResearchEngine
     cfg, db = _open_engine(args)
@@ -745,6 +790,20 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--limit", type=int, default=25)
     sp.add_argument("--force", action="store_true")
     sp.set_defaults(func=cmd_resume)
+
+    sp = sub.add_parser("research",
+                        help="full semantic research: one command → verdict + clickable evidence links")
+    sp.add_argument("query")
+    sp.add_argument("--region", default=None)
+    sp.add_argument("--year", default=None)
+    sp.add_argument("--limit", type=int, default=30)
+    sp.add_argument("--markdown", action="store_true", help="output as markdown report")
+    sp.set_defaults(func=cmd_research)
+
+    sp = sub.add_parser("expand-variants",
+                        help="show all spelling variants that would be searched for a toponym")
+    sp.add_argument("name")
+    sp.set_defaults(func=cmd_expand_variants)
 
     return p
 

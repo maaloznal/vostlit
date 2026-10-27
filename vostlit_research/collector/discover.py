@@ -187,14 +187,35 @@ def discover(
 
 
 def _is_catalog_or_index(url: str) -> bool:
+    """True if the URL is a hub/catalog/index PAGE (to be harvested for links),
+    not a document text page (to be stored directly).
+
+    Bug fix: the previous version matched ANY .htm/.html under /Texts/Dokumenty/
+    (including text1.htm deep in /Kavkaz/XIX/1860-1880/Tri_mesjac_dag_otrjad/),
+    which caused discover() to harvest the document's links instead of storing
+    it as a document — silently dropping it from the corpus.
+
+    A real region catalog is a file DIRECTLY in /Texts/Dokumenty/ (e.g.
+    /Texts/Dokumenty/kavkaz.html), not in a nested subdirectory. We detect
+    that by checking the path has exactly the form
+    /texts/dokumenty/<filename>.html? (no further path segments after the
+    region filename).
+    """
+    import re
     p = urlsplit(url).path.lower()
-    return (
-        p == "/"
-        or "/haupt-dateien/index-dateien/" in p
-        or "/texts/dokumenty/index.phtml" in p
-        or p.endswith("/index.htm")
-        or ("/texts/dokumenty/" in p and p.endswith((".html", ".htm")))
-    )
+    if p == "/":
+        return True
+    if "/haupt-dateien/index-dateien/" in p:
+        return True
+    if "/texts/dokumenty/index.phtml" in p:
+        return True
+    if p.endswith("/index.htm"):
+        return True
+    # region catalog: /texts/dokumenty/<region>.html? — exactly one segment
+    # after /texts/dokumenty/ and it ends in .html/.htm (NOT a nested doc path)
+    if re.match(r"^/texts/dokumenty/[^/]+\.(html?|htm)$", p):
+        return True
+    return False
 
 
 def _guess_page_type(url: str) -> str | None:
