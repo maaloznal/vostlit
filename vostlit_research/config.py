@@ -70,6 +70,7 @@ class Config:
         "notes_page",
         "image_gallery",
         "collection_index",
+        "frameset",
     )
 
     def to_dict(self) -> dict[str, Any]:

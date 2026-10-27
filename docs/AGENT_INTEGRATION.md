@@ -50,9 +50,11 @@ MCP and the `mcp` Python package is available, a thin server can expose:
 | `search_exact` | `search_exact(phrase, filters)` |
 | `search_name_variants` | `search_name_variants(name)` |
 | `search_fuzzy` | `search_fuzzy(name, threshold)` |
+| `search_toponym` | `search_engine.search_toponym(name, filters)` (§11 candidate table) |
 | `get_document` | `get_document(id)` |
 | `get_context` | `get_context(section_id, before, after)` |
 | `find_mentions` | `find_mentions(name)` |
+| `extract_mentions` | `extract_mentions(entity_id, overwrite)` (heuristic, candidate) |
 | `compare_sources` | `compare_sources(claim, ids)` |
 | `get_bibliography` | `get_document_bibliography(id)` |
 

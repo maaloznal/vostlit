@@ -56,6 +56,14 @@ class ImageRef:
 
 
 @dataclass
+class FrameRef:
+    """A single <frame> inside a <frameset> page."""
+    src: str           # absolute URL of the inner frame document
+    name: str | None   # the frame's name attribute (e.g. Hauptframe, Fussnoten)
+    role: str           # main | notes | nav | unknown (inferred from name/src)
+
+
+@dataclass
 class ParsedPage:
     page_type: str = "unknown"
     title: str | None = None
@@ -78,6 +86,7 @@ class ParsedPage:
     sections: list[Section] = field(default_factory=list)
     links: list[Link] = field(default_factory=list)
     images: list[ImageRef] = field(default_factory=list)
+    frames: list[FrameRef] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     source_metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -159,6 +168,12 @@ def classify(url: str, soup: BeautifulSoup, raw_size: int) -> str:
     # homepage: bare path on the site root
     if path in ("", "/") and host in ("www.vostlit.info", "vostlit.info"):
         return "home"
+    # frameset pages: real <frameset> (verified on Nogmov framevved1.htm and
+    # several others in the Caucasus catalog). Must be detected BEFORE the
+    # bare-.htm document_text branch, because framesets have no #main and
+    # would otherwise be misparsed as empty documents.
+    if soup.find("frameset") is not None:
+        return "frameset"
     if "/haupt-dateien/index-dateien/" in path:
         return "alpha_index"
     if "/texts/dokumenty/index.phtml" in path:
@@ -209,6 +224,8 @@ def parse_page(url: str, raw_or_text: bytes | str, *, charset: str | None = None
         _parse_image_gallery(url, soup, parsed)
     elif ptype == "collection_index":
         _parse_collection_index(url, soup, parsed)
+    elif ptype == "frameset":
+        _parse_frameset(url, soup, parsed)
     elif ptype == "document_text":
         if soup.find(id="main") is not None:
             _parse_phtml_doc(url, soup, parsed)
@@ -446,6 +463,86 @@ def _parse_phtml_doc(url: str, soup: BeautifulSoup, p: ParsedPage) -> None:
     if citation_text:
         emit("bibliography", text=citation_text)
         p.bibliography = citation_text
+
+
+# ---------------------------------------------------------------------- frameset
+
+def _infer_frame_role(name: str | None, src: str) -> str:
+    """Infer a frame's role from its name attribute and src filename.
+
+    Verified patterns on vostlit framesets (Nogmov, Gazavat-name, Meier):
+      - Hauptframe / main / top   -> the body text
+      - Fussnoten / notes / prim* -> footnotes/comments (primvved1.htm, primtext*.htm)
+      - nav / menu / inhalt       -> navigation
+    """
+    n = (name or "").lower()
+    s = src.lower()
+    if any(k in n for k in ("haupt", "main", "top", "text")) or "text" in s or "vved" in s or s.endswith((".htm", ".phtml")) and "prim" not in s and "nav" not in s and "inhalt" not in s:
+        # default to main unless clearly notes/nav
+        if any(k in n for k in ("fuss", "note", "prim")) or "prim" in s:
+            return "notes"
+        if any(k in n for k in ("nav", "menu", "inhalt", "left")):
+            return "nav"
+        return "main"
+    if any(k in n for k in ("fuss", "note", "prim")) or "prim" in s:
+        return "notes"
+    if any(k in n for k in ("nav", "menu", "inhalt", "left")):
+        return "nav"
+    return "unknown"
+
+
+def _parse_frameset(url: str, soup: BeautifulSoup, p: ParsedPage) -> None:
+    """Parse a <frameset> page.
+
+    Verified structure (Nogmov framevved1.htm, and the same pattern repeats
+    for framepred*.htm / frametext*.htm / framevved*.htm across the corpus):
+    a <frameset rows="*,15%"> with two <frame>s — the main text and the
+    footnotes. The frameset page itself has NO content; the real text lives
+    in the inner frame documents.
+
+    The parser extracts the inner frame URLs (resolved against the frameset
+    URL) and records them both as structured ``frames`` and as ``links`` so
+    the collector can follow them. It also infers each frame's role so a
+    caller can prefer the ``main`` frame for body text and the ``notes``
+    frame for commentary.
+    """
+    p.warnings.append("frameset page: content is in inner frames; fetch them for full text")
+    if soup.title:
+        p.title = _clean(soup.title.string) or None
+    frames = soup.find_all("frame")
+    if not frames:
+        p.warnings.append("frameset has no <frame> children")
+        return
+    for f in frames:
+        src = f.get("src")
+        if not src:
+            continue
+        abs_url = urljoin(url, src)
+        name = f.get("name")
+        role = _infer_frame_role(name, src)
+        fr = FrameRef(src=abs_url, name=name, role=role)
+        p.frames.append(fr)
+        # also expose as a link so discovery/crawl can follow it
+        label = f"{role} frame"
+        if name:
+            label = f"{role} frame ({name})"
+        p.links.append(Link(abs_url, label, kind="frame"))
+        # record a section so the DB has something searchable: the frame's
+        # role + URL, so a query for the work still surfaces this page.
+        p.sections.append(Section(
+            section_type="heading",
+            heading=f"[{role} frame] {abs_url}",
+            text=abs_url,
+            source_url=abs_url,
+        ))
+    # best-effort title from the main frame's filename
+    main_frames = [fr for fr in p.frames if fr.role == "main"]
+    if main_frames and not p.title:
+        p.work_title = main_frames[0].src.rsplit("/", 1)[-1] or None
+    p.source_metadata["frames"] = [
+        {"src": fr.src, "name": fr.name, "role": fr.role} for fr in p.frames
+    ]
+    p.extracted_text = " | ".join(f"[{fr.role}] {fr.src}" for fr in p.frames) or None
 
 
 # ---------------------------------------------------------------------- .htm bare doc

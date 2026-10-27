@@ -132,19 +132,39 @@ python3 -m vostlit_research search "<query>"             # hybrid search
 python3 -m vostlit_research search-exact "<phrase>"      # exact, preserves spelling
 python3 -m vostlit_research search-variants "<name>"     # name-variant dictionary
 python3 -m vostlit_research search-fuzzy "<name>"        # candidates only
+python3 -m vostlit_research toponym "<name>"             # §11 candidate table (mountain search)
 python3 -m vostlit_research by-region Дагестан "<query>" # region filter
 python3 -m vostlit_research document <id>                # full document + version
 python3 -m vostlit_research section <id>                 # one section
 python3 -m vostlit_research context <id> --before 2 --after 2
 python3 -m vostlit_research mentions "<name>"            # mentions table + text
+python3 -m vostlit_research extract-mentions             # heuristic candidate mentions
 python3 -m vostlit_research compare "<claim>" <id1> <id2>
 python3 -m vostlit_research bibliography <id>
+python3 -m vostlit_research works --min 1                # group docs into logical works
+python3 -m vostlit_research regions                      # known region catalog slugs
+python3 -m vostlit_research note add --claim "..." --status hypothesis --supporting sec:487
+python3 -m vostlit_research note list
+python3 -m vostlit_research note show <id>
+python3 -m vostlit_research note verify <id>             # reproducibility: cited fragments resolve?
 python3 -m vostlit_research audit-site <url>...          # fetch+classify (polite)
 python3 -m vostlit_research crawl --region caucasus --limit 25
 python3 -m vostlit_research import-jsonl <file>
 python3 -m vostlit_research export <out.jsonl>
 python3 -m vostlit_research rebuild-fts
 ```
+
+### Mountain-search scenario (§11) — one-command end-to-end
+
+```bash
+python3 scripts/mountain_search.py "гора Джалдари-меер" --region Дагестан --year 1839
+```
+
+Runs the full algorithm: decompose → strip geo-generics → expand variants →
+exact/fts/variant/fuzzy → candidate table with date-fit, region-fit,
+independence check → cautious verdict
+(Подтверждено / Вероятно / Возможно / Не установлено) + concrete next steps.
+Never asserts identity without ≥2 independent verbatim attestations.
 
 `search`/`search-exact`/`by-region` accept `--region`, `--author`,
 `--source-type`, `--date-from`, `--date-to`.

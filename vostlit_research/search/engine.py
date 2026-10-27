@@ -423,3 +423,82 @@ class SearchEngine:
                 by_key[key] = r2
         ordered = sorted(by_key.values(), key=lambda x: x.score, reverse=True)
         return ordered[:limit]
+
+    # --- toponym candidate table (master prompt §11) ---------------------
+    def search_toponym(self, name: str, filters: "SearchFilters | None" = None, *,
+                       limit: int = 50) -> dict:
+        """Run the full toponym-search algorithm and return a candidate table.
+
+        Implements the §11 pipeline:
+          1. strip generic geographic terms (гора/хребет/перевал/урочище/меер/...)
+             to get the toponym CORE; keep both forms.
+          2. search exact + fts for the full form AND the core.
+          3. look up the name-variant dictionary for both forms.
+          4. fuzzy-match against variants + entities (candidates only).
+          5. assemble a de-duplicated candidate table with, per candidate:
+             form_searched, match_type, document_id, section_id, snippet,
+             context, confidence, argument, source_url.
+
+        Returns a dict with the query breakdown and the candidate list. The
+        verdict is NOT produced here — that is the agent's judgment (this
+        method only gathers evidence, per the anti-fabrication rules).
+        """
+        from .. import textnorm
+        core = textnorm.strip_geo_generic(name)
+        forms = [name]
+        if core and core != textnorm.normalise_search(name):
+            forms.append(core)
+        # also include the normalised full form (so we don't miss ё/pre-reform
+        # variants of the user's spelling)
+        norm_full = textnorm.normalise_search(name)
+        if norm_full and norm_full not in [textnorm.normalise_search(f) for f in forms]:
+            forms.append(norm_full)
+
+        candidates: list[dict] = []
+        seen_keys: set[tuple] = set()
+
+        def _add(result: "SearchResult", form: str, matched_as: str) -> None:
+            key = (result.document_id, result.section_id, matched_as)
+            if key in seen_keys:
+                return
+            seen_keys.add(key)
+            doc = _doc_row(self.db, result.document_id) if result.document_id else None
+            candidates.append({
+                "form_searched": form,
+                "matched_as": matched_as,
+                "document_id": result.document_id,
+                "section_id": result.section_id,
+                "title": result.title,
+                "author": result.author,
+                "region": result.region or (doc["region"] if doc else None),
+                "publication_year": result.publication_year,
+                "source_url": result.canonical_url,
+                "snippet": result.snippet,
+                "context_before": result.context_before,
+                "context_after": result.context_after,
+                "confidence": result.confidence,
+                "argument": result.explanation,
+            })
+
+        for form in forms:
+            for r in self.search_exact(form, filters, limit=limit):
+                _add(r, form, "exact")
+            for r in self.search(form, filters, limit=limit):
+                _add(r, form, "fts")
+            for r in self.search_variants(form, limit=limit):
+                _add(r, form, "variant")
+        for r in self.search_fuzzy(core or name, filters, limit=limit):
+            _add(r, core or name, "fuzzy_candidate")
+
+        # rank: exact > variant > fts > fuzzy
+        rank = {"exact": 0, "variant": 1, "fts": 2, "fuzzy_candidate": 3}
+        candidates.sort(key=lambda c: (rank.get(c["matched_as"], 9), -len(c.get("snippet") or "")))
+
+        return {
+            "query": name,
+            "core_toponym": core,
+            "forms_searched": forms,
+            "n_candidates": len(candidates),
+            "candidates": candidates[:limit],
+            "note": "candidates only — do not infer identity without context + date + geography corroboration",
+        }

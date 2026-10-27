@@ -7,8 +7,10 @@ cd /home/z/my-project/vostlit-research
 python3 -m pytest tests/ -c pyproject.toml
 ```
 
-Current state: **53 passed, 2 skipped**. The 2 skips are live-site
-integration tests (see below).
+Current state: **67 passed, 2 skipped** (v0.2.0). The 2 skips are live-site
+integration tests (see below). The v0.2 additions are in
+`tests/test_v02_improvements.py` (14 tests: frameset, extract-mentions,
+toponym, notes, works, doctor-empty-hint).
 
 ## What is covered (master prompt §15 checklist)
 

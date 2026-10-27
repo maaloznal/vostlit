@@ -175,6 +175,105 @@ class ResearchEngine:
             })
         return out[:limit]
 
+    def extract_mentions(self, *, entity_id: int | None = None,
+                         overwrite: bool = False, limit_per_variant: int = 50) -> dict:
+        """Heuristically extract mentions of name-variants from body sections.
+
+        For each name_variant (optionally filtered to one entity), scans every
+        ``body`` section for occurrences of the variant's ORIGINAL form and
+        records a ``mentions`` row with:
+          - extraction_method='heuristic'
+          - verification_status='candidate'   (NEVER confirmed automatically)
+          - context_before / context_after (±120 chars, original orthography)
+          - mention_text = the exact matched span
+
+        Idempotent: re-running with overwrite=False skips variant/section
+        pairs already recorded. With overwrite=True, deletes prior heuristic
+        mentions for the same variant+section and re-extracts.
+
+        Returns a summary dict. This NEVER promotes a candidate to confirmed
+        — that requires an explicit human/agent action.
+        """
+        from .. import textnorm
+        where = "WHERE 1=1"
+        params: list = []
+        if entity_id is not None:
+            where += " AND entity_id = ?"
+            params.append(entity_id)
+        variants = self.db.conn.execute(
+            f"""SELECT id, entity_id, original_form, normalized_form
+                FROM name_variants {where}""", params
+        ).fetchall()
+        if not variants:
+            return {"variants_scanned": 0, "mentions_inserted": 0, "mentions_skipped": 0,
+                    "note": "no name_variants in the dictionary; curate entities first"}
+
+        inserted = 0
+        skipped = 0
+        WIDTH = 120
+        for v in variants:
+            vid, eid, orig, norm = v["id"], v["entity_id"], v["original_form"], v["normalized_form"]
+            if not orig:
+                continue
+            # search in body sections using the original form (case-insensitive,
+            # but ORIGINAL spelling — no folding, so pre-reform forms match only
+            # themselves, which is exactly what we want for a candidate mention).
+            needle = orig.lower()
+            rows = self.db.conn.execute(
+                """SELECT s.id, s.document_id, s.text, s.text_lower
+                   FROM document_sections s
+                   WHERE s.section_type = 'body' AND s.text_lower LIKE ?
+                   LIMIT ?""",
+                (f"%{needle}%", limit_per_variant),
+            ).fetchall()
+            for r in rows:
+                # de-dup: skip if a heuristic mention already exists for this
+                # variant + section (unless overwrite)
+                if not overwrite:
+                    exists = self.db.conn.execute(
+                        "SELECT 1 FROM mentions WHERE name_variant_id=? AND section_id=? AND extraction_method='heuristic' LIMIT 1",
+                        (vid, r["id"]),
+                    ).fetchone()
+                    if exists:
+                        skipped += 1
+                        continue
+                else:
+                    self.db.conn.execute(
+                        "DELETE FROM mentions WHERE name_variant_id=? AND section_id=? AND extraction_method='heuristic'",
+                        (vid, r["id"]),
+                    )
+                # locate the mention and cut context using the offset-preserving fold
+                text = r["text"] or ""
+                folded = textnorm.fold_for_match(text)
+                folded_needle = textnorm.fold_for_match(orig)
+                idx = folded.find(folded_needle)
+                if idx < 0:
+                    # fall back to plain lower find
+                    idx = text.lower().find(needle)
+                    if idx < 0:
+                        continue
+                end = idx + len(orig)
+                ctx_before = text[max(0, idx - WIDTH):idx].strip()
+                ctx_after = text[end:end + WIDTH].strip()
+                mention_span = text[idx:end]
+                with self.db.conn:
+                    self.db.conn.execute(
+                        """INSERT INTO mentions
+                           (entity_id, name_variant_id, document_id, section_id,
+                            mention_text, context_before, context_after,
+                            mention_type, extraction_method, verification_status)
+                           VALUES (?,?,?,?,?,?,?, 'inferred', 'heuristic', 'candidate')""",
+                        (eid, vid, r["document_id"], r["id"],
+                         mention_span, ctx_before, ctx_after),
+                    )
+                inserted += 1
+        return {
+            "variants_scanned": len(variants),
+            "mentions_inserted": inserted,
+            "mentions_skipped": skipped,
+            "note": "all inserted mentions are 'candidate' — confirm manually before citing as evidence",
+        }
+
     def compare_sources(self, claim: str, source_ids: list[int]) -> dict[str, Any]:
         """Gather, per source, the fragments that support or contradict a claim.
 

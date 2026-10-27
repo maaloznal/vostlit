@@ -140,6 +140,51 @@ class Crawler:
         else:
             report.parsed += 1
 
+        # --- frameset follow-through ---------------------------------------
+        # A frameset page has no content of its own; the real text lives in
+        # its inner <frame> documents. After storing the frameset, fetch each
+        # inner frame (within the page cap) and store it as its own document,
+        # linked back to the frameset via source_metadata.parent_frameset_url.
+        if parsed.page_type == "frameset" and parsed.frames:
+            for fr in parsed.frames:
+                # respect the per-run page cap
+                if self.http._pages_this_run >= self.cfg.max_pages_per_run:
+                    parsed.warnings.append(
+                        f"frameset inner frame not fetched (cap reached): {fr.src}"
+                    )
+                    break
+                try:
+                    self._fetch_parse_store_inner(fr, parent_url=url, report=report)
+                except Exception as e:  # noqa: BLE001
+                    report.errors += 1
+                    report.error_urls.append(f"{fr.src} (inner frame: {e})")
+
+    def _fetch_parse_store_inner(self, frame, *, parent_url: str, report: CrawlReport) -> None:
+        """Fetch a <frame> src discovered inside a frameset page and store it
+        as its own document, linked back to the parent frameset."""
+        res = self.http.fetch(frame.src)
+        report.fetched += 1
+        charset = _charset(res.content_type)
+        parsed = parse_page(frame.src, res.content, charset=charset)
+        if parsed.page_type not in self.cfg.fetch_page_types:
+            report.skipped += 1
+            return
+        doc = _parsed_to_document_in(frame.src, parsed)
+        # link the inner frame back to its parent frameset
+        meta = dict(doc.source_metadata or {})
+        meta["parent_frameset_url"] = parent_url
+        meta["frame_role"] = frame.role
+        doc.source_metadata = meta
+        _, action = store.upsert_document(
+            self.db, doc,
+            html_bytes=res.content if self.cfg.store_html else None,
+            archive_root=self.cfg.archive_dir,
+        )
+        if action == "unchanged":
+            report.unchanged += 1
+        else:
+            report.parsed += 1
+
 
 def _abs(cfg: Config, url: str) -> str:
     if url.startswith("http"):
