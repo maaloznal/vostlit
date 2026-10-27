@@ -32,10 +32,22 @@ class Config:
     # D-2 fix: '/' is intentionally NOT in this list — it would bypass the
     # path check (every path starts with '/'). The homepage is handled
     # explicitly in HttpClient._check_scope (path == "/" is allowed).
+    #
+    # Each prefix is justified by a verified entry point on the live site
+    # (see docs/SITE_COVERAGE_AUDIT.md §2):
+    #   /haupt-Dateien/  — alphabetical author index (A..JA, ids 2041..2069)
+    #   /Texts/          — the main documents tree (texts, catalogs, collections)
+    #   /common/         — site-wide indexes: itogi yearly archive, lib_uk
+    #   /Repertorium/    — 682 European-medieval documents (verified live)
+    #   /MGH/            — Monumenta Germaniae Historica series
+    #   /MPH/            — Monumenta Poloniae Historica series
     allowed_sections: tuple[str, ...] = (
-        "/haupt-Dateien/",  # alphabetical author index
-        "/Texts/",  # documents (texts, catalogs, collections)
-        "/common/",  # site-wide indexes (itogi)
+        "/haupt-Dateien/",
+        "/Texts/",
+        "/common/",
+        "/Repertorium/",
+        "/MGH/",
+        "/MPH/",
     )
     user_agent: str = "Mozilla/5.0 (compatible; vostlit-research/0.1; +local-research)"
 
@@ -73,6 +85,13 @@ class Config:
         "image_gallery",
         "collection_index",
         "frameset",
+        "chrono",
+        # Index/catalog pages contain document descriptions in their <td>/<p>
+        # cells that are worth indexing (e.g. kavkaz.html's 349 document
+        # descriptions, the alpha index's author/work titles). Previously
+        # these were discovered-only and their text was lost.
+        "region_catalog",
+        "alpha_index",
     )
 
     def to_dict(self) -> dict[str, Any]:

@@ -1,7 +1,7 @@
 ---
 name: vostlit-research
 slug: vostlit-research
-version: 0.3.0
+version: 0.3.1
 description: Reproducible historical research over the vostlit.info source corpus (Caucasus & Dagestan focus). Search, read, compare and cite medieval/early-modern historical sources with verifiable links to the original pages.
 metadata: {"clawdbot":{"emoji":"📜","requires":{"bins":["python3"]},"os":["linux","darwin"]}}
 ---

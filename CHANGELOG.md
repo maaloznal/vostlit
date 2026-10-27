@@ -2,6 +2,68 @@
 
 All notable changes to vostlit-research. Dates are Europe/Moscow.
 
+## [0.3.1] — 2025-10-27
+
+Blocker-fix & independent verification. Closes the 4 P0 site-coverage
+defects (N4) from v0.3.0 QA, adds real HTTP-level redirect tests, and an
+end-to-end pipeline test on a persistent DB.
+
+### Discovery fixes (N4 a/b/c — confirmed by tests/test_discovery_fixes.py)
+- **N4a:** `_is_doc_url` now accepts `/common/`, `/Repertorium/`, `/MGH/`,
+  `/MPH/` in addition to `/texts/`. Each new root is justified by a verified
+  live entry point (SITE_COVERAGE_AUDIT.md §2) and added to
+  `allowed_sections` with an inline comment explaining why.
+- **N4b:** `chrono.phtml` pages now have their own parser (`_parse_chrono`)
+  that extracts every `<tr>` as a body section. Verified: was 0 sections,
+  now >=3 on a synthetic chrono fixture. The normal `.phtml` parser still
+  skips `<p>` inside tables (correct for document pages where tables are
+  navigation), but `chrono` pages ARE the table.
+- **N4c:** `region_catalog` and `alpha_index` added to `fetch_page_types` —
+  their `<td>`/`<p>` document descriptions are now indexed (previously
+  discovered-only, text lost).
+- **Unknown page types** are now classified `"unknown"` with a warning
+  (never silently dropped); inventory reports them via
+  `unsupported_page_types`.
+
+### HTTP client fixes (confirmed by tests/test_redirect_http.py — 9 tests)
+- **4xx/5xx no longer retried uselessly:** `httpx.HTTPStatusError` (404,
+  403, 500) raises immediately. Only 429/503 are retried (with Retry-After).
+  Verified: 404 makes exactly 1 request (was 3).
+- **Real HTTP-level redirect tests** via `httpx.MockTransport` (no network):
+  - 302 to offsite host → RefusedError, offsite host NEVER requested
+  - 302 to forbidden path on same host → RefusedError
+  - redirect loop → FetchError "too many redirects"
+  - 3xx without Location → FetchError
+  - 404 → no retry (1 request)
+  - 429 numeric Retry-After → honored (sleeps, retries, succeeds)
+  - 429 HTTP-date Retry-After → honored
+  - body > cap without Content-Length → TooLargeResponseError (streaming abort)
+  - normal 200 → works
+
+### End-to-end pipeline test (tests/test_e2e_pipeline.py)
+- Full `discover → fetch → parse → store → inventory → resume` on a
+  persistent test DB with a local MockTransport serving real fixtures.
+- SQL-verified: discovered URLs persisted, documents parsed, sections have
+  text + stable_keys, FTS5 populated, re-import keeps stable IDs, resume
+  parses queued docs, no duplicates.
+- `inventory` shows `discovered >= 1` when a queue exists (was the v0.3.0
+  complaint).
+
+### Documentation
+- README, TESTING, IMPLEMENTATION_REPORT synced to 102 passing tests.
+- Version bumped to 0.3.1 across pyproject/__init__/SKILL.
+
+### Tests
+- **102 passing** (was 77), 2 skipped (live). New files:
+  `test_discovery_fixes.py` (15), `test_redirect_http.py` (9),
+  `test_e2e_pipeline.py` (2). Minus 1 removed weak redirect test.
+
+### Known limitations (unchanged from v0.3.0)
+- OCR-error strategy not implemented.
+- `fts_match_documents` has 0 call sites (metadata FTS unused).
+- `mongol.html` region_catalog fragility (needs verification).
+- Live end-to-end crawl on the persistent DB still not run (only fixture-based).
+
 ## [0.3.0] — 2025-10-27
 
 Master Upgrade Mission: P0 security & reproducibility hardening + P1 search

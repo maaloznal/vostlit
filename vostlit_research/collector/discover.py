@@ -55,11 +55,28 @@ ALPHA_IDS = {  # verified id query values for each letter
 
 
 def _is_doc_url(url: str) -> bool:
+    """True if a URL points at a content page worth inventorying.
+
+    Previously required `/texts/` in the path, which silently dropped 5
+    classes of entry points confirmed on the live site (SITE_COVERAGE_AUDIT.md §2):
+      - /common/            (itogi yearly archive, lib_uk bibliographic indexes)
+      - /Repertorium/       (682 European-medieval docs, verified live)
+      - /MGH/               (Monumenta Germaniae Historica series)
+      - /MPH/               (Monumenta Poloniae Historica series)
+    Each of these is a vostlit.info-internal document collection whose pages
+    end in .phtml/.htm/.html — exactly the same shape as /texts/. They are
+    allowlisted in config.allowed_sections, so the path is in-scope; the
+    document-shape check (file extension) is what matters here.
+    """
     p = urlsplit(url)
     path = p.path.lower()
-    if "/texts/" not in path:
+    # accept any of the known in-scope document roots
+    if not any(root in path for root in (
+        "/texts/", "/common/", "/repertorium/", "/mgh/", "/mph/",
+    )):
         return False
-    # document-ish files
+    # document-ish files (exclude directory indexes without an extension —
+    # those are catalog pages, not documents, and are harvested separately)
     return path.endswith((".phtml", ".htm", ".html"))
 
 
@@ -67,7 +84,7 @@ def _record_discovered(db: Database, url: str, page_type: str | None) -> None:
     canonical = textnorm.normalise_url(url)
     with db.conn:
         row = db.conn.execute(
-            "SELECT id FROM documents WHERE canonical_url = ?", (canonical,)
+            "SELECT id, page_type FROM documents WHERE canonical_url = ?", (canonical,)
         ).fetchone()
         if row is None:
             db.conn.execute(
@@ -76,6 +93,12 @@ def _record_discovered(db: Database, url: str, page_type: str | None) -> None:
                    VALUES (?,?,?,?,?, 'discovered')""",
                 (canonical, textnorm.stable_id_from_url(canonical), page_type,
                  db.now(), db.now()),
+            )
+        elif page_type and not row["page_type"]:
+            # update page_type if we now know it and didn't before
+            db.conn.execute(
+                "UPDATE documents SET page_type = ? WHERE canonical_url = ?",
+                (page_type, canonical),
             )
         db.conn.execute(
             "INSERT INTO crawl_log (url, canonical_url, fetched_at, action) VALUES (?,?,?, 'discovered')",

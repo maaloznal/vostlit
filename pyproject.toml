@@ -1,6 +1,6 @@
 [project]
 name = "vostlit-research"
-version = "0.3.0"
+version = "0.3.1"
 description = "Reproducible local research system over the historical sources at vostlit.info (Caucasus & Dagestan focus)."
 readme = "README.md"
 requires-python = ">=3.11"

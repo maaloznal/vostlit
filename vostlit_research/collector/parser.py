@@ -184,6 +184,12 @@ def classify(url: str, soup: BeautifulSoup, raw_size: int) -> str:
         return "notes_page"
     if "karten" in path:
         return "image_gallery"
+    # chrono.phtml pages are table-based chronologies (verified 0 sections
+    # with the normal .phtml parser, which skips <p> inside <table>). Give
+    # them their own type so the content (the chronology entries IS the
+    # table) is not lost.
+    if "chrono" in path and path.endswith(".phtml"):
+        return "chrono"
     # collection index .htm
     if path.endswith("/index.htm") and not has_main:
         return "collection_index"
@@ -226,13 +232,19 @@ def parse_page(url: str, raw_or_text: bytes | str, *, charset: str | None = None
         _parse_collection_index(url, soup, parsed)
     elif ptype == "frameset":
         _parse_frameset(url, soup, parsed)
+    elif ptype == "chrono":
+        _parse_chrono(url, soup, parsed)
     elif ptype == "document_text":
         if soup.find(id="main") is not None:
             _parse_phtml_doc(url, soup, parsed)
         else:
             _parse_htm_doc(url, soup, parsed)
     else:
-        parsed.warnings.append(f"unclassified page: {url}")
+        # Unknown page types are explicitly recorded (never silently dropped)
+        # so the inventory can report them and a human can decide whether to
+        # add a parser. See docs/SITE_COVERAGE_AUDIT.md §6.
+        parsed.warnings.append(f"unclassified page type for: {url}")
+        parsed.page_type = "unknown"
     # drop non-http links (mailto:, javascript:, etc.) once, at the boundary
     parsed.links = [lk for lk in parsed.links if lk.url.lower().startswith(("http://", "https://"))]
     return parsed
@@ -463,6 +475,72 @@ def _parse_phtml_doc(url: str, soup: BeautifulSoup, p: ParsedPage) -> None:
     if citation_text:
         emit("bibliography", text=citation_text)
         p.bibliography = citation_text
+
+
+# ---------------------------------------------------------------------- chrono
+
+def _parse_chrono(url: str, soup: BeautifulSoup, p: ParsedPage) -> None:
+    """Parse a chrono.phtml (chronology) page.
+
+    Verified on Tegan `chrono.phtml?id=1472` (28 KB page → 0 sections with
+    the normal .phtml parser, which skips <p> inside <table>). Chronology
+    pages are ENTIRELY table-based: each row is a year + event. We extract
+    every <tr>'as a body section and also pick up any loose <p> in #main.
+    """
+    main = soup.find(id="main") or soup.body or soup
+    if soup.title:
+        p.title = _clean(soup.title.string) or None
+    h4 = main.find("h4")
+    if h4:
+        p.author = _clean(h4.get_text()) or p.author
+    h2 = main.find("h2")
+    if h2:
+        p.work_title = _clean(h2.get_text()) or p.work_title
+    # citation #dann (same as .phtml docs)
+    dann = main.find(id="dann")
+    if dann is not None:
+        cit = _clean(dann.get_text(" "))
+        if cit:
+            p.citation = cit
+            import re as _re
+            m = _re.search(r"Текст\s+воспроизведен по изданию:\s*(.+?)(?:\s*©|$)", cit)
+            if m:
+                p.publication_title = m.group(1).strip()
+                years = _re.findall(r"\b(1[5-9]\d{2}|20\d{2})\b", m.group(1))
+                if years:
+                    p.publication_year = years[-1]
+        dann.extract()
+    # extract every table row as a body section (chronology entries)
+    seq = 0
+    body_chunks: list[str] = []
+    for table in main.find_all("table"):
+        for tr in table.find_all("tr"):
+            cells = tr.find_all(["td", "th"])
+            if not cells:
+                continue
+            row_text = _clean(" | ".join(_clean(c.get_text(" ")) for c in cells))
+            if not row_text:
+                continue
+            seq += 1
+            p.sections.append(Section(section_type="body", text=row_text, source_url=url))
+            body_chunks.append(row_text)
+    # also pick up loose <p> in #main (not inside tables)
+    for el in main.find_all("p"):
+        if el.find_parent(["table"]):
+            continue
+        txt = _clean(el.get_text(" "))
+        if not txt:
+            continue
+        p.sections.append(Section(section_type="body", text=txt, source_url=url))
+        body_chunks.append(txt)
+    p.extracted_text = "\n\n".join(body_chunks).strip() or None
+    if not p.sections:
+        p.warnings.append("chrono page yielded no rows (table layout may differ)")
+    # collect links to other parts
+    for a in main.find_all("a", href=True):
+        href = urljoin(url, a["href"])
+        if "/Texts/" in href or "/common/" in href:
+            p.links.append(Link(href, _clean(a.get_text()), "part"))
 
 
 # ---------------------------------------------------------------------- frameset

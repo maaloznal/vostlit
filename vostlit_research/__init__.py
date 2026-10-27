@@ -21,7 +21,7 @@ Design principles (see SKILL.md and docs/):
 
 from __future__ import annotations
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 # Public, stable import surface (kept tiny on purpose).
 from .config import Config, load_config  # noqa: E402,F401

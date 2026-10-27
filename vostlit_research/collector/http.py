@@ -193,7 +193,14 @@ class HttpClient:
                     time.sleep(min(wait, MAX_RETRY_AFTER_SECONDS + self.cfg.retry_jitter))
                     continue
                 break
+            except httpx.HTTPStatusError as e:
+                # non-retryable HTTP status (e.g. 404, 403, 500). Raise
+                # immediately — do NOT retry permanent client/server errors
+                # (only 429/503 are retryable, handled above). The error body
+                # never reaches the parser.
+                raise FetchError(f"HTTP {e.response.status_code} for {canonical}") from e
             except httpx.HTTPError as e:
+                # network-level error (connect/timeout/read) — retryable
                 last_exc = e
                 if attempt < self.cfg.max_retries:
                     backoff = self.cfg.retry_backoff ** attempt

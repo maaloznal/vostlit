@@ -7,10 +7,19 @@ cd <project-root>
 python3 -m pytest tests/ -c pyproject.toml
 ```
 
-Current state: **67 passed, 2 skipped** (v0.2.0). The 2 skips are live-site
-integration tests (see below). The v0.2 additions are in
-`tests/test_v02_improvements.py` (14 tests: frameset, extract-mentions,
-toponym, notes, works, doctor-empty-hint).
+Current state: **102 passed, 2 skipped** (v0.3.1). The 2 skips are live-site
+integration tests (see below). Test files:
+- `test_parser.py` (13) — verified page-type parsing
+- `test_normalize.py` (12) — text normalisation, fuzzy, URL canonicalisation
+- `test_store.py` (7) — dedup, versioning, FTS sync, import/export
+- `test_search.py` (11) — exact/fts/variant/fuzzy/context/hybrid
+- `test_cli_security.py` (9) — CLI + archive path safety
+- `test_v02_improvements.py` (14) — frameset, mentions, toponym, notes, works
+- `test_p0_p1_regression.py` (10) — P0 security + section-id + search F1/F2/F3
+- `test_discovery_fixes.py` (15) — v0.3.1: _is_doc_url roots, chrono parser, catalogs
+- `test_redirect_http.py` (9) — v0.3.1: real HTTP-level redirect/error tests via MockTransport
+- `test_e2e_pipeline.py` (2) — v0.3.1: full pipeline on persistent DB
+- `test_integration_live.py` (2, skipped by default) — live site
 
 ## What is covered (master prompt §15 checklist)
 

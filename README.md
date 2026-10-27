@@ -136,7 +136,7 @@ archive and fixtures are for **personal research only** and must not be
 redistributed. The collector respects `allowed_domains`/`allowed_sections`
 and uses polite delays; it does not bypass auth/CAPTCHA/paywall.
 
-## Status (v0.1.0)
+## Status (v0.3.1)
 
 Working MVP: collector, archive, FTS5 search, research engine, CLI, skill,
 tests — all verified against real fixtures. The seeded corpus is 10 pages;
