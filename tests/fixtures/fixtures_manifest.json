@@ -1,0 +1,153 @@
+{
+  "manifest_schema": 1,
+  "project": "vostlit-research",
+  "source_site": "https://www.vostlit.info/",
+  "encoding_note": "All fixtures are saved as RAW server bytes (windows-1251). Tests must decode with 'windows-1251' before parsing with BeautifulSoup.",
+  "fetched_at_timezone": "Europe/Moscow (UTC+3)",
+  "user_agent": "Mozilla/5.0 (compatible; vostlit-research-audit/0.1)",
+  "fixtures": [
+    {
+      "filename": "home.html",
+      "source_url": "https://www.vostlit.info/",
+      "fetched_at": "2026-10-27T17:14:57+03:00",
+      "http_status": 200,
+      "content_type": "text/html; charset=windows-1251",
+      "byte_size": 123853,
+      "sha256": "010556dbb2572aeb99cecc53cfe3075afa7bb0fd694c00b7981a40c0d0b07d1f",
+      "encoding": "windows-1251",
+      "description": "Homepage with headmenu (А..Я + Документы), featured docs list, ad blocks."
+    },
+    {
+      "filename": "alpha_index_G.html",
+      "source_url": "https://www.vostlit.info/haupt-Dateien/index-Dateien/G.phtml?id=2044",
+      "fetched_at": "2026-10-27T17:14:57+03:00",
+      "http_status": 200,
+      "content_type": "text/html; charset=windows-1251",
+      "byte_size": 90854,
+      "sha256": "155d914dcd434835cbfe612e293f0c808770da71518e93cb65cb986fa13cb49a",
+      "encoding": "windows-1251",
+      "description": "Alphabetical author index, letter Г (G.phtml?id=2044). ~710 /Texts/ links."
+    },
+    {
+      "filename": "dokumenty_hub.html",
+      "source_url": "https://www.vostlit.info/Texts/Dokumenty/index.phtml?id=2070",
+      "fetched_at": "2026-10-27T17:14:57+03:00",
+      "http_status": 200,
+      "content_type": "text/html; charset=windows-1251",
+      "byte_size": 15417,
+      "sha256": "e967d9800e64231596164351bda4858d1ebbea8e6fad8b94618102c6188f199e",
+      "encoding": "windows-1251",
+      "description": "Documents hub: regional catalog (index.phtml?id=2070). Lists 45 regions incl. КАВКАЗ."
+    },
+    {
+      "filename": "itogi.html",
+      "source_url": "https://www.vostlit.info/common/itogi.phtml?id=101",
+      "fetched_at": "2026-10-27T17:14:57+03:00",
+      "http_status": 200,
+      "content_type": "text/html; charset=windows-1251",
+      "byte_size": 7942,
+      "sha256": "5aaec035b7cee0e1b960aad17f5dc2cf9b582aa9c613ebb379cf6dc039c4f810",
+      "encoding": "windows-1251",
+      "description": "'Итоги прошлых лет' yearly archive index (itogi.phtml?id=101). 25 yearly links."
+    },
+    {
+      "filename": "document_text_iordan_text2.html",
+      "source_url": "https://www.vostlit.info/Texts/rus/Iordan/text2.phtml?id=577",
+      "fetched_at": "2026-10-27T17:14:57+03:00",
+      "http_status": 200,
+      "content_type": "text/html; charset=windows-1251",
+      "byte_size": 140260,
+      "sha256": "f4bbdf5a2a399846f235d6ddb44b8ef6fd65db03fce1029f513186e00eae698e",
+      "encoding": "windows-1251",
+      "description": "Rich .phtml doc: Iordan, Getica part 2 (text2.phtml?id=577). Has blue <sup> footnotes, maroon [page] markers, red {chapter} markers, link to notes pages primtext6-10."
+    },
+    {
+      "filename": "document_text_tunmann_pred.html",
+      "source_url": "https://www.vostlit.info/Texts/rus5/Tunmann/pred.phtml?id=1541",
+      "fetched_at": "2026-10-27T17:14:57+03:00",
+      "http_status": 200,
+      "content_type": "text/html; charset=windows-1251",
+      "byte_size": 31432,
+      "sha256": "18958af1ff08a8fcc31b86555c37b58ae0c77ea3f6775ae2fec32911e3c086f4",
+      "encoding": "windows-1251",
+      "description": ".phtml doc: Tunmann, Crimean Khanate preface (pred.phtml?id=1541). Has inline <h5>Комментарии</h5> section with <p><strong>N</strong>. text</p> notes."
+    },
+    {
+      "filename": "document_text_esai_pred2.html",
+      "source_url": "https://www.vostlit.info/Texts/rus/Esai/pred2.phtml?id=483",
+      "fetched_at": "2026-10-27T17:14:57+03:00",
+      "http_status": 200,
+      "content_type": "text/html; charset=windows-1251",
+      "byte_size": 16480,
+      "sha256": "f1d9dd922d0b04698a3a7ed3a0f437ab068896b3535da011949f30711f1f87b5",
+      "encoding": "windows-1251",
+      "description": ".phtml doc: Esai Hasan-Jalalyan, History of Albania, intro (pred2.phtml?id=483). Caucasus (Artsakh/Albania)."
+    },
+    {
+      "filename": "document_text_wachushti_text11.html",
+      "source_url": "https://www.vostlit.info/Texts/rus6/Wachushti/text11.phtml?id=251",
+      "fetched_at": "2026-10-27T17:14:57+03:00",
+      "http_status": 200,
+      "content_type": "text/html; charset=windows-1251",
+      "byte_size": 84244,
+      "sha256": "c4df943adecd88e781c94ab60920a3e753c3bfbb23c6815dbd09136ea256ffa7",
+      "encoding": "windows-1251",
+      "description": ".phtml doc: Vakhushti Bagrationi, History of Georgia, text11 (text11.phtml?id=251). Caucasus (Georgia)."
+    },
+    {
+      "filename": "document_text_sirvan_derbend_karten.html",
+      "source_url": "https://www.vostlit.info/Texts/rus13/Sirvan_Derbend/karten.phtml?id=1906",
+      "fetched_at": "2026-10-27T17:14:57+03:00",
+      "http_status": 200,
+      "content_type": "text/html; charset=windows-1251",
+      "byte_size": 6505,
+      "sha256": "4fc453b87532faf040e8d048672f1cfcdfc69a52f303ed4447224cd308895504",
+      "encoding": "windows-1251",
+      "description": "Image-gallery .phtml: History of Shirvan & Derbend maps (karten.phtml?id=1906). Dagestan/Caucasus."
+    },
+    {
+      "filename": "document_text_dagestan_1792.html",
+      "source_url": "https://www.vostlit.info/Texts/Dokumenty/Kavkaz/XVIII/1780-1800/Dagestan_poddanstvo_1792/text.htm",
+      "fetched_at": "2026-10-27T17:14:57+03:00",
+      "http_status": 200,
+      "content_type": "text/html; charset=windows-1251",
+      "byte_size": 13834,
+      "sha256": "72d85ab1d2486c2f31f02782c6dd7aa66da5133c0e71fdfe6d84345144e3bfc8",
+      "encoding": "windows-1251",
+      "description": "Bare .htm document (NO site chrome): 'On Dagestan entry into Russian subjection, 1792'. Dagestan."
+    },
+    {
+      "filename": "document_text_dag_chron_index.html",
+      "source_url": "https://www.vostlit.info/Texts/Dokumenty/Kavkaz/VI/Dag_chron/index.htm",
+      "fetched_at": "2026-10-27T17:14:57+03:00",
+      "http_status": 200,
+      "content_type": "text/html; charset=windows-1251",
+      "byte_size": 4572,
+      "sha256": "72ec10d247a3e2a07663b508cdcc75a12bef34a056b5c401b8d68d0665cda757",
+      "encoding": "windows-1251",
+      "description": "Index .htm to 'Dagestan Historical Writings' collection (Dag_chron/index.htm). Lists 13 Dagestan chronicles (Derbend-name, Akhty-name, Tarikh-i Dagestan, etc.)."
+    },
+    {
+      "filename": "notes_page_iordan_primtext6.html",
+      "source_url": "https://www.vostlit.info/Texts/rus/Iordan/primtext6.phtml",
+      "fetched_at": "2026-10-27T17:14:57+03:00",
+      "http_status": 200,
+      "content_type": "text/html; charset=windows-1251",
+      "byte_size": 70697,
+      "sha256": "35a2e2913a129a10cd6f6ad6796df1356a251b57ca5a706bf1f6cbd17d21c268",
+      "encoding": "windows-1251",
+      "description": "Notes page .phtml: Iordan comments 401-500 (primtext6.phtml). Structure: <h5>Комментарии</h5> + <p><strong>N</strong>. text</p>."
+    },
+    {
+      "filename": "kavkaz_catalog.fragment.html",
+      "source_url": "https://www.vostlit.info/Texts/Dokumenty/kavkaz.html",
+      "fetched_at": "2026-10-27T17:14:57+03:00",
+      "http_status": 200,
+      "content_type": "text/html; charset=windows-1251",
+      "byte_size": 99912,
+      "sha256": "60ed0c4a15d2504e001a7c0e7e9369eb6a6e36d8644e6b1564d61ac1f93703e9",
+      "encoding": "windows-1251",
+      "description": "FRAGMENT (truncated) of the Caucasus documents catalog (kavkaz.html). Original 750834 bytes; keeps <head> + table 0 (64 rows) + first 40 of 285 rows of table 1. See file header comment."
+    }
+  ]
+}

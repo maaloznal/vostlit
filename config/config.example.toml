@@ -1,0 +1,37 @@
+# vostlit_research configuration — copy to config.toml and edit.
+# All keys are optional; defaults live in vostlit_research/config.py.
+# Environment variables (VOSTLIT_*) override these values.
+
+[vostlit]
+base_url = "https://www.vostlit.info/"
+db_path = "data/vostlit.db"
+archive_dir = "data/archive"
+store_html = true
+
+# --- politeness ---
+user_agent = "Mozilla/5.0 (compatible; vostlit-research/0.1; +local-research)"
+http_timeout = 30.0
+request_delay = 3.0
+max_retries = 3
+retry_backoff = 2.0
+retry_jitter = 1.0
+max_pages_per_run = 25
+
+# --- logging ---
+log_level = "INFO"
+# log_file = "data/vostlit.log"
+
+# --- semantic search (optional) ---
+# "none" = disabled (default). The engine never fabricates vector results.
+semantic_provider = "none"
+# semantic_model = ""
+# semantic_index_path = "data/semantic.index"
+
+# --- page types the collector will fetch & parse (others are discovered only) ---
+fetch_page_types = [
+    "document_text",
+    "document_excerpt",
+    "notes_page",
+    "image_gallery",
+    "collection_index",
+]

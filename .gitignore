@@ -1,0 +1,60 @@
+# vostlit-research .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# venv
+.venv/
+venv/
+env/
+bin/
+lib/
+
+# local data (NEVER commit corpora, DB, or archived HTML snapshots)
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/archive/
+data/vostlit.log
+data/semantic.index
+# keep the data/ dir in the working tree but empty in git:
+data/.gitkeep
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*~
+
+# --- SECRETS (never commit) ---
+.env
+.env.local
+.env.*.local
+*.secret
+*.pem
+*.key
+.netrc
+# any file whose name contains 'token' or 'credential' (defensive)
+*token*
+*credential*
+*password*
+# git credential stores
+.git-credentials
+.gitconfig.local
+
+# local crawl logs / scratch
+*.log
+scratch/
+tmp/
